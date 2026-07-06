@@ -397,6 +397,69 @@ html.dark .countdown.expired { background: #3d1a1a; border-color: #5a2a2a; color
         var WEBHOOK_WHATSAPP_URL = '';
         var WEBHOOK_EMAIL_URL = '';
         var supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        var currentProduct = null;
+
+        // Carregar produto da URL
+        async function loadProduct() {
+            var params = new URLSearchParams(window.location.search);
+            var productId = params.get('product');
+            if (!productId) {
+                window.location.href = 'catalogo.html';
+                return;
+            }
+            try {
+                var result = await supabaseClient.from('products').select('*').eq('id', productId).eq('active', true).single();
+                if (result.error || !result.data) {
+                    window.location.href = 'catalogo.html';
+                    return;
+                }
+                currentProduct = result.data;
+                applyProduct();
+            } catch(e) {
+                console.error(e);
+                window.location.href = 'catalogo.html';
+            }
+        }
+
+        function applyProduct() {
+            if (!currentProduct) return;
+            // Title & meta
+            document.title = currentProduct.name + ' - Oferta Relampago';
+            document.querySelector('meta[name="description"]').setAttribute('content', currentProduct.description || currentProduct.name + ' profissional. Entrega instantanea.');
+            // Image
+            var img = document.querySelector('.image-wrapper img');
+            if (img && currentProduct.image_url) { img.src = currentProduct.image_url; img.alt = currentProduct.name; }
+            // Badge
+            var badge = document.querySelector('.badge-discount');
+            if (badge && currentProduct.badge) { badge.textContent = currentProduct.badge; }
+            // Product title
+            var title = document.querySelector('.product-title');
+            if (title) { title.textContent = currentProduct.name; }
+            // Pricing
+            var priceOld = document.querySelector('.price-old');
+            if (priceOld && currentProduct.old_price) { priceOld.textContent = 'De R$ ' + currentProduct.old_price.toFixed(2).replace('.', ','); }
+            var priceDigits = document.getElementById('price-digits');
+            if (priceDigits) { priceDigits.textContent = currentProduct.price.toFixed(0); }
+            var priceCents = document.querySelector('.price-cents');
+            if (priceCents) { priceCents.textContent = ',00'; }
+            var installment = (currentProduct.price / 3).toFixed(2).replace('.', ',');
+            var priceInstallments = document.querySelector('.price-installments');
+            if (priceInstallments) { priceInstallments.textContent = 'ou 3x de R$ ' + installment; }
+            // Price timer target
+            var priceTimerEl = document.getElementById('price-timer');
+            if (priceTimerEl) { priceTimerEl.textContent = '15:00'; }
+            // Form title
+            var formTitle = document.querySelector('.form-title');
+            if (formTitle) { formTitle.textContent = 'Garantir meu(a) ' + currentProduct.name; }
+            // Review step
+            var reviewName = document.getElementById('review-name');
+            if (reviewName) { reviewName.textContent = '\u2014'; }
+            var reviewWhatsapp = document.getElementById('review-whatsapp');
+            if (reviewWhatsapp) { reviewWhatsapp.textContent = '\u2014'; }
+        }
+
+        // Iniciar carregamento do produto
+        loadProduct();
 
         (function() {
             var bar = document.getElementById('splash-bar');
@@ -507,7 +570,7 @@ html.dark .countdown.expired { background: #3d1a1a; border-color: #5a2a2a; color
         priceTimerEl.textContent = Math.floor(priceTimeLeft/60).toString().padStart(2,'0')+':'+(priceTimeLeft%60).toString().padStart(2,'0');
         setInterval(function() {
             priceTimeLeft--;
-            if (priceTimeLeft <= 0) { priceTimeLeft = 0; priceTimerEl.textContent = '00:00'; document.getElementById('price-digits').textContent = '200'; return; }
+            if (priceTimeLeft <= 0) { priceTimeLeft = 0; priceTimerEl.textContent = '00:00'; var pd = document.getElementById('price-digits'); if (pd && currentProduct && currentProduct.old_price) pd.textContent = currentProduct.old_price.toFixed(0); return; }
             priceTimerEl.textContent = Math.floor(priceTimeLeft/60).toString().padStart(2,'0')+':'+(priceTimeLeft%60).toString().padStart(2,'0');
         }, 1000);
 
@@ -597,7 +660,8 @@ html.dark .countdown.expired { background: #3d1a1a; border-color: #5a2a2a; color
         }
 
         async function saveLead(name, whatsapp) {
-            var leadData = { name: name.trim(), whatsapp: whatsapp.replace(/\D/g,''), product: 'Paginas HTML & CSS', source: 'landing-page', status: 'novo' };
+            var productName = currentProduct ? currentProduct.name : 'Paginas HTML & CSS';
+            var leadData = { name: name.trim(), whatsapp: whatsapp.replace(/\D/g,''), product: productName, source: 'landing-page', status: 'novo' };
             var result = await supabaseClient.from('leads').insert([leadData]);
             if (result.error) throw result.error;
             return leadData;

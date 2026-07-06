@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Painel Admin - Gerenciamento de Leads de Paginas HTML & CSS">
+    <meta name="description" content="Painel Admin - Gerenciamento de Leads de Produtos">
     <meta name="theme-color" content="#0a0a12">
-    <title>Admin — Dashboard de Paginas HTML & CSS ⚡</title>
+    <title>Admin — Dashboard de Produtos ⚡</title>
 
     <!-- Favicon -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
@@ -935,6 +935,9 @@
         .filter-pill.active-conversao { background: rgba(16,185,129,0.12); border-color: rgba(16,185,129,0.4); color: var(--green); }
         .filter-pill.active-perdido   { background: rgba(239,68,68,0.12); border-color: rgba(239,68,68,0.4); color: var(--red); }
 
+        .filter-label { font-size: 10px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; margin-top: 6px; }
+        #product-pills .filter-pill.active-all { background: rgba(99,102,241,0.12); border-color: rgba(99,102,241,0.4); color: #818cf8; }
+
         /* ═══════════════════════════════════════════
            CONFIRM MODAL
            ═══════════════════════════════════════════ */
@@ -1567,6 +1570,11 @@
                         <button class="filter-pill" data-status="perdido"   onclick="setStatusFilter(this, 'perdido')">❌ Perdido</button>
                     </div>
 
+                    <div class="filter-pills" id="product-pills">
+                        <span class="filter-label">Produto:</span>
+                        <button class="filter-pill active-all" data-product="" onclick="setProductFilter(this, '')">Todos Produtos</button>
+                    </div>
+
                     <div style="display:flex;gap:8px;align-items:center;">
                         <label style="font-size:11px;color:var(--text-3);white-space:nowrap;">De</label>
                         <input type="date" id="filter-date-from" class="filter-date" onchange="applyFilters()">
@@ -1647,6 +1655,12 @@
                     <option value="contatado">Contatado</option>
                     <option value="conversao">Em Conversao</option>
                     <option value="perdido">Perdido</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Produto</label>
+                <select id="edit-product" class="form-select">
+                    <option value="">Selecione...</option>
                 </select>
             </div>
 
@@ -1947,8 +1961,45 @@
             selectedIds.clear();
             updateBulkUI();
             loadLeads();
+            loadProducts();
             setupRealtime();
             resetSessionTimer();
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // PRODUCTS (filter pills + edit modal)
+        // ═══════════════════════════════════════════════════════════════
+        let productsList = [];
+
+        async function loadProducts() {
+            try {
+                const { data, error } = await supabaseClient.from('products').select('*').eq('active', true).order('sort_order');
+                if (error) throw error;
+                productsList = data || [];
+                renderProductPills();
+                renderProductSelect();
+            } catch (err) {
+                console.error('Erro ao carregar produtos:', err);
+            }
+        }
+
+        function renderProductPills() {
+            const container = document.getElementById('product-pills');
+            let html = '<button class="filter-pill active-all" data-product="" onclick="setProductFilter(this, \'\')">Todos Produtos</button>';
+            productsList.forEach(function(p) {
+                html += '<button class="filter-pill" data-product="' + p.name + '" onclick="setProductFilter(this, \'' + p.name.replace(/'/g, "\\'") + '\')">' + p.name + '</button>';
+            });
+            container.innerHTML = html;
+        }
+
+        function renderProductSelect() {
+            const select = document.getElementById('edit-product');
+            if (!select) return;
+            let html = '<option value="">Selecione...</option>';
+            productsList.forEach(function(p) {
+                html += '<option value="' + p.name + '">' + p.name + ' - R$ ' + p.price.toFixed(0) + '</option>';
+            });
+            select.innerHTML = html;
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -1996,6 +2047,7 @@
         // ═══════════════════════════════════════════════════════════════
         let filterStatus   = '';
         let filterSearch   = '';
+        let filterProduct  = '';
         let filterDateFrom = '';
         let filterDateTo   = '';
         let sortField      = 'created_at';
@@ -2009,8 +2061,17 @@
 
         function setStatusFilter(el, status) {
             filterStatus = status;
-            document.querySelectorAll('.filter-pill').forEach(p => p.className = 'filter-pill');
+            document.querySelectorAll('.filter-pill[data-status]').forEach(p => p.className = 'filter-pill');
             const suffix = status === '' ? 'all' : status;
+            el.classList.add('active-' + suffix);
+            currentPage = 1;
+            applyFilters();
+        }
+
+        function setProductFilter(el, product) {
+            filterProduct = product;
+            document.querySelectorAll('#product-pills .filter-pill').forEach(p => p.className = 'filter-pill');
+            const suffix = product === '' ? 'all' : product;
             el.classList.add('active-' + suffix);
             currentPage = 1;
             applyFilters();
@@ -2034,13 +2095,16 @@
         function clearFilters() {
             filterSearch   = '';
             filterStatus   = '';
+            filterProduct  = '';
             filterDateFrom = '';
             filterDateTo   = '';
             document.getElementById('filter-search').value    = '';
             document.getElementById('filter-date-from').value = '';
             document.getElementById('filter-date-to').value   = '';
-            document.querySelectorAll('.filter-pill').forEach(p => p.className = 'filter-pill');
+            document.querySelectorAll('.filter-pill[data-status]').forEach(p => p.className = 'filter-pill');
             document.querySelector('.filter-pill[data-status=""]').classList.add('active-all');
+            document.querySelectorAll('#product-pills .filter-pill').forEach(p => p.className = 'filter-pill');
+            document.querySelector('#product-pills .filter-pill[data-product=""]').classList.add('active-all');
             currentPage = 1;
             selectedIds.clear();
             updateBulkUI();
@@ -2053,6 +2117,7 @@
 
             filteredLeads = leads.filter(lead => {
                 if (filterStatus && lead.status !== filterStatus) return false;
+                if (filterProduct && lead.product !== filterProduct) return false;
                 if (filterSearch) {
                     const name = (lead.name || '').toLowerCase();
                     const wa   = (lead.whatsapp || '').toLowerCase();
@@ -2080,7 +2145,7 @@
                 return 0;
             });
 
-            const hasFilter = filterStatus || filterSearch || filterDateFrom || filterDateTo;
+            const hasFilter = filterStatus || filterProduct || filterSearch || filterDateFrom || filterDateTo;
             document.getElementById('filter-clear-btn').classList.toggle('visible', !!hasFilter);
             document.getElementById('filter-count').innerHTML =
                 `<strong>${filteredLeads.length}</strong> de ${leads.length} lead${leads.length !== 1 ? 's' : ''}`;
@@ -2406,6 +2471,7 @@
             document.getElementById('edit-name').value     = lead.name     || '';
             document.getElementById('edit-whatsapp').value = lead.whatsapp || '';
             document.getElementById('edit-status').value   = lead.status   || 'novo';
+            document.getElementById('edit-product').value  = lead.product  || '';
             loadLeadNotes(id);
             document.getElementById('edit-modal').classList.add('show');
         }
@@ -2472,6 +2538,7 @@
             const name     = document.getElementById('edit-name').value.trim();
             const whatsapp = document.getElementById('edit-whatsapp').value.replace(/\D/g, '');
             const status   = document.getElementById('edit-status').value;
+            const product  = document.getElementById('edit-product').value;
 
             if (!name || name.length < 2) {
                 showToast('Nome deve ter pelo menos 2 caracteres', 'error');
@@ -2487,7 +2554,7 @@
             btn.disabled = true;
 
             try {
-                const { error } = await supabaseClient.from('leads').update({ name, whatsapp, status }).eq('id', id);
+                const { error } = await supabaseClient.from('leads').update({ name, whatsapp, status, product }).eq('id', id);
                 if (error) throw error;
                 closeModal();
                 showToast('Lead atualizado com sucesso!', 'success');
@@ -2848,7 +2915,7 @@
             var name = prompt('Nome do filtro:');
             if (!name) return;
             var saved = JSON.parse(localStorage.getItem('saved_filters') || '[]');
-            saved.push({ name: name, status: filterStatus, search: filterSearch, dateFrom: filterDateFrom, dateTo: filterDateTo });
+            saved.push({ name: name, status: filterStatus, product: filterProduct, search: filterSearch, dateFrom: filterDateFrom, dateTo: filterDateTo });
             localStorage.setItem('saved_filters', JSON.stringify(saved));
             renderSavedFilters();
             showToast('Filtro salvo!', 'success');
@@ -2859,14 +2926,19 @@
             var f = saved[idx];
             if (!f) return;
             filterStatus = f.status || '';
+            filterProduct = f.product || '';
             filterSearch = f.search || '';
             document.getElementById('filter-search').value = filterSearch;
             document.getElementById('filter-date-from').value = f.dateFrom || '';
             document.getElementById('filter-date-to').value = f.dateTo || '';
-            document.querySelectorAll('.filter-pill').forEach(function(p) { p.className = 'filter-pill'; });
+            document.querySelectorAll('.filter-pill[data-status]').forEach(function(p) { p.className = 'filter-pill'; });
             var suffix = filterStatus === '' ? 'all' : filterStatus;
             var activePill = document.querySelector('.filter-pill[data-status="'+filterStatus+'"]') || document.querySelector('.filter-pill[data-status=""]');
             if (activePill) activePill.classList.add('active-'+suffix);
+            document.querySelectorAll('#product-pills .filter-pill').forEach(function(p) { p.className = 'filter-pill'; });
+            var pSuffix = filterProduct === '' ? 'all' : filterProduct;
+            var activePillP = document.querySelector('#product-pills .filter-pill[data-product="'+filterProduct+'"]') || document.querySelector('#product-pills .filter-pill[data-product=""]');
+            if (activePillP) activePillP.classList.add('active-'+pSuffix);
             currentPage = 1;
             applyFilters();
             showToast('Filtro "'+f.name+'" aplicado', 'success');

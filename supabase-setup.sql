@@ -72,6 +72,47 @@ CREATE TABLE IF NOT EXISTS rate_limits (
 CREATE INDEX IF NOT EXISTS idx_rate_limits_ip ON rate_limits(ip_address, endpoint, window_start);
 
 -- ------------------------------------------------------
+-- TABELA: products (catalogo de produtos)
+-- ------------------------------------------------------
+CREATE TABLE IF NOT EXISTS products (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    description TEXT,
+    price NUMERIC(10,2) NOT NULL,
+    old_price NUMERIC(10,2),
+    image_url TEXT,
+    badge TEXT,
+    active BOOLEAN DEFAULT true,
+    sort_order INTEGER DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Produtos iniciais
+INSERT INTO products (name, description, price, old_price, image_url, badge, sort_order) VALUES
+('Paginas HTML & CSS', 'Paginas estaticas profissionais, codigo limpo e responsivo. Ideais para portfolios, sites institucionais e paginas de apresentacao.', 80, 200, 'https://images.unsplash.com/photo-1621839673705-6617adf9e890?w=800&h=800&fit=crop&q=80', '60% OFF', 1),
+('Landing Pages', 'Paginas de conversao otimizadas para vender mais. Design profissional, copy persuasivo e call-to-action estrategico.', 150, 350, 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800&h=800&fit=crop&q=80', '57% OFF', 2),
+('Sistemas Web', 'Sistemas completos com login, CRUD, dashboard e painel administrativo. Solucoes sob medida para seu negocio.', 300, 800, 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800&h=800&fit=crop&q=80', '62% OFF', 3)
+ON CONFLICT (name) DO NOTHING;
+
+-- RLS para products
+ALTER TABLE products ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Produtos leitura publica" ON products;
+CREATE POLICY "Produtos leitura publica" ON products
+    FOR SELECT TO anon
+    USING (active = true);
+
+DROP POLICY IF EXISTS "Produtos leitura autenticada" ON products;
+CREATE POLICY "Produtos leitura autenticada" ON products
+    FOR SELECT TO authenticated
+    USING (true);
+
+DROP POLICY IF EXISTS "Produtos gerenciamento autenticado" ON products;
+CREATE POLICY "Produtos gerenciamento autenticado" ON products
+    FOR ALL TO authenticated
+    USING (true);
+
+-- ------------------------------------------------------
 -- GARANTIR COLUNAS EXISTENTES (para tabelas ja criadas)
 -- ------------------------------------------------------
 ALTER TABLE leads ADD COLUMN IF NOT EXISTS phone_verified BOOLEAN DEFAULT false;
@@ -448,5 +489,11 @@ BEGIN
         WHERE pubname = 'supabase_realtime' AND tablename = 'lead_notes'
     ) THEN
         ALTER PUBLICATION supabase_realtime ADD TABLE lead_notes;
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_publication_tables
+        WHERE pubname = 'supabase_realtime' AND tablename = 'products'
+    ) THEN
+        ALTER PUBLICATION supabase_realtime ADD TABLE products;
     END IF;
 END $$;
